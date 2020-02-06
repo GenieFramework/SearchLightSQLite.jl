@@ -1,7 +1,7 @@
 module SearchLightSQLite
 
 import Revise
-import SQLite, DataFrames, DataStreams, Logging
+import SQLite, DataFrames, Logging
 import SearchLight
 
 export DatabaseHandle, ResultHandle
