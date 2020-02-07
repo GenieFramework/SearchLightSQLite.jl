@@ -4,8 +4,6 @@ import Revise
 import SQLite, DataFrames, Logging
 import SearchLight
 
-export DatabaseHandle, ResultHandle
-
 
 #
 # Setup
@@ -214,9 +212,9 @@ function SearchLight.to_store_sql(m::T; conflict_strategy = :error)::String wher
     fields = SearchLight.SQLColumn(uf)
     vals = join( map(x -> string(SearchLight.to_sqlinput(m, Symbol(x), getfield(m, Symbol(x)))), uf), ", ")
 
-    "INSERT $(conflict_strategy == :ignore ? " OR IGNORE" : "") INTO $(m._table_name) ($fields) VALUES ($vals)"
+    "INSERT $(conflict_strategy == :ignore ? " OR IGNORE" : "") INTO $(SearchLight.table_name(m)) ($fields) VALUES ($vals)"
   else
-    "UPDATE $(m._table_name) SET $(SearchLight.update_query_part(m))"
+    "UPDATE $(SearchLight.table_name(m)) SET $(SearchLight.update_query_part(m))"
   end
 
   string( sql, raw" ",
@@ -228,7 +226,7 @@ end
 
 function SearchLight.delete_all(m::Type{T}; truncate::Bool = true, reset_sequence::Bool = true, cascade::Bool = false)::Nothing where {T<:SearchLight.AbstractModel}
   _m::T = m()
-  "DELETE FROM $(_m._table_name)" |> SearchLight.query
+  "DELETE FROM $(SearchLight.table_name(_m))" |> SearchLight.query
 
   nothing
 end
@@ -237,7 +235,7 @@ end
 function SearchLight.delete(m::T)::T where {T<:SearchLight.AbstractModel}
   SearchLight.ispersisted(m) || throw(SearchLight.Exceptions.NotPersistedException(m))
 
-  "DELETE FROM $(m._table_name) WHERE $(SearchLight.primary_key_name(m)) = '$(m.id.value)'" |> SearchLight.query
+  "DELETE FROM $(SearchLight.table_name(m)) WHERE $(SearchLight.primary_key_name(m)) = '$(m.id.value)'" |> SearchLight.query
 
   m.id = SearchLight.DbId()
 
@@ -256,7 +254,7 @@ end
 function SearchLight.update_query_part(m::T)::String where {T<:SearchLight.AbstractModel}
   update_values = join(map(x -> "$(string(SearchLight.SQLColumn(x))) = $(string(SearchLight.to_sqlinput(m, Symbol(x), getfield(m, Symbol(x)))) )", SearchLight.persistable_fields(m)), ", ")
 
-  " $update_values WHERE $(m._table_name).$(SearchLight.primary_key_name(m)) = '$(m.id.value)'"
+  " $update_values WHERE $(SearchLight.table_name(m)).$(SearchLight.primary_key_name(m)) = '$(m.id.value)'"
 end
 
 
@@ -266,7 +264,7 @@ end
 
 
 function SearchLight.to_from_part(m::Type{T})::String where {T<:SearchLight.AbstractModel}
-  string("FROM ", SearchLight.escape_column_name(m()._table_name, CONNECTIONS[end]))
+  string("FROM ", SearchLight.escape_column_name(SearchLight.table_name(m()), CONNECTIONS[end]))
 end
 
 
@@ -300,12 +298,12 @@ end
 
 
 function SearchLight.to_limit_part(l::SearchLight.SQLLimit) :: String
-  l.value != "ALL" ? string("LIMIT ", (l |> string)) : ""
+  l.value != "ALL" ? string("LIMIT ", l) : ""
 end
 
 
 function SearchLight.to_offset_part(o::Int) :: String
-  o != 0 ? string("OFFSET ", (o |> string)) : ""
+  o != 0 ? string("OFFSET ", o) : ""
 end
 
 
@@ -324,6 +322,11 @@ function SearchLight.to_join_part(m::Type{T}, joins::Union{Nothing,Vector{Search
   joins === nothing && return ""
 
   join(map(x -> string(x), joins), " ")
+end
+
+
+function Base.rand(m::Type{T}; limit = 1)::Vector{T} where {T<:SearchLight.AbstractModel}
+  SearchLight.find(m, SearchLight.SQLQuery(limit = SearchLight.SQLLimit(limit), order = [SearchLight.SQLOrder("random()", raw = true)]))
 end
 
 
@@ -382,7 +385,7 @@ end
 
 
 function SearchLight.Migration.add_column(table_name::Union{String,Symbol}, name::Union{String,Symbol}, column_type::Union{String,Symbol}; default::Union{String,Symbol,Nothing} = nothing, limit::Union{Int,Nothing} = nothing, not_null::Bool = false) :: Nothing
-  "ALTER TABLE $table_name ADD $(column_sql(name, column_type, default = default, limit = limit, not_null = not_null))" |> SearchLight.query
+  "ALTER TABLE $table_name ADD $(SearchLight.column(name, column_type, default = default, limit = limit, not_null = not_null))" |> SearchLight.query
 
   nothing
 end
@@ -395,11 +398,6 @@ function SearchLight.Migration.drop_table(name::Union{String,Symbol}) :: Nothing
 end
 
 
-# function SearchLight.Migration.remove_column(table_name::Union{String,Symbol}, name::Union{String,Symbol}) :: Nothing
-#   throw(SearchLight.UnsupportedException(:remove_column, Symbol(SQLite)))
-# end
-
-
 function SearchLight.Migration.remove_index(name::Union{String,Symbol}) :: Nothing
   "DROP INDEX $name" |> SearchLight.query
 
@@ -407,9 +405,7 @@ function SearchLight.Migration.remove_index(name::Union{String,Symbol}) :: Nothi
 end
 
 
-function Base.rand(m::Type{T}; limit = 1)::Vector{T} where {T<:SearchLight.AbstractModel}
-  SearchLight.find(m, SearchLight.SQLQuery(limit = SearchLight.SQLLimit(limit), order = [SearchLight.SQLOrder("random()", raw = true)]))
-end
+#### GENERATOR ####
 
 
 function SearchLight.Generator.FileTemplates.adapter_default_config()
