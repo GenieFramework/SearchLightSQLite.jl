@@ -72,8 +72,15 @@ end
 
 Disconnects from database.
 """
-function SearchLight.disconnect(conn::DatabaseHandle = CONNECTIONS[end]) :: Nothing
+function SearchLight.disconnect(conn::DatabaseHandle = SearchLight.connection()) :: Nothing
   conn = nothing
+end
+
+
+function SearchLight.connection()
+  isempty(CONNECTIONS) && throw(SearchLight.Exceptions.NotConnectedException())
+
+  CONNECTIONS[end]
 end
 
 
@@ -121,22 +128,12 @@ Escapes the column name using native features provided by the database backend.
 julia>
 ```
 """
-function SearchLight.escape_column_name(c::String, conn::DatabaseHandle = CONNECTIONS[end]) :: String
+function SearchLight.escape_column_name(c::String, conn::DatabaseHandle = SearchLight.connection()) :: String
   join([SQLite.esc_id(c) for c in split(c, '.')], '.')
 end
 
 
-"""
-    escape_value{T}(v::T, conn::DatabaseHandle)::T
-
-Escapes the value `v` using native features provided by the database backend if available.
-
-# Examples
-```julia
-julia>
-```
-"""
-function SearchLight.escape_value(v::T, conn::DatabaseHandle = CONNECTIONS[end])::T where {T}
+function SearchLight.escape_value(v::T, conn::DatabaseHandle = SearchLight.connection())::T where {T}
   isa(v, Number) ? v : "'$(replace(string(v), "'"=>"''"))'"
 end
 
@@ -163,7 +160,7 @@ julia> query(SearchLight.to_fetch_sql(Article, SQLQuery(limit = 5)), false, Data
 ...
 ```
 """
-function SearchLight.query(sql::String, conn::DatabaseHandle = CONNECTIONS[end]; internal = false) :: DataFrames.DataFrame
+function SearchLight.query(sql::String, conn::DatabaseHandle = SearchLight.connection(); internal = false) :: DataFrames.DataFrame
   parts::Vector{String} = if occursin(SELECT_LAST_ID_QUERY_START, sql)
                             split(sql, SELECT_LAST_ID_QUERY_START)
                           else
@@ -264,7 +261,7 @@ end
 
 
 function SearchLight.to_from_part(m::Type{T})::String where {T<:SearchLight.AbstractModel}
-  string("FROM ", SearchLight.escape_column_name(SearchLight.table_name(m()), CONNECTIONS[end]))
+  string("FROM ", SearchLight.escape_column_name(SearchLight.table_name(m()), SearchLight.connection()))
 end
 
 
