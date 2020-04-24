@@ -12,6 +12,7 @@ SQLite = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
 SearchLight = "340e8cb6-72eb-11e8-37ce-c97ebeb32050"
 
 [compat]
+DBInterface = "2"
 DataFrames = "0.20"
 Revise = "2"
 SQLite = "1"
