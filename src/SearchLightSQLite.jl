@@ -37,7 +37,7 @@ const TYPE_MAPPINGS = Dict{Symbol,Symbol}( # Julia => SQLite
 )
 
 const SELECT_LAST_ID_QUERY_START = "; SELECT CASE WHEN last_insert_rowid() = 0 THEN"
-const SELECT_LAST_ID_QUERY_END = "ELSE last_insert_rowid() END AS id"
+const SELECT_LAST_ID_QUERY_END = "ELSE last_insert_rowid() END AS $(SearchLight.LAST_INSERT_ID_LABEL)"
 
 const CONNECTIONS = DatabaseHandle[]
 
