@@ -1,7 +1,7 @@
 name = "SearchLightSQLite"
 uuid = "21a827c4-482a-11ea-3a19-4d2243a4a2c5"
 authors = ["Adrian Salceanu <e@essenciary.com>"]
-version = "0.5.0"
+version = "0.6"
 
 [deps]
 DBInterface = "a10d1c49-ce27-4219-8d33-6db1a4562965"
@@ -12,7 +12,7 @@ SearchLight = "340e8cb6-72eb-11e8-37ce-c97ebeb32050"
 
 [compat]
 DBInterface = "2"
-DataFrames = "0.21"
+DataFrames = "0.22"
 SQLite = "1"
-SearchLight = "0.21"
+SearchLight = "0.22"
 julia = "1"
