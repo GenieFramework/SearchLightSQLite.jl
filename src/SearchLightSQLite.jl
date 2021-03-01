@@ -179,10 +179,26 @@ function SearchLight.query(sql::String, conn::DatabaseHandle = SearchLight.conne
     end
   else
     if length(parts) == 2
-      DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
-      DBInterface.execute(conn, parts[2]) |> DataFrames.DataFrame
+      try
+        DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
+      catch ex
+        @error parts[1]
+        @error ex
+      end
+
+      try
+        DBInterface.execute(conn, parts[2]) |> DataFrames.DataFrame
+      catch ex
+        @error parts[2]
+        @error ex
+      end
     else
-      DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
+      try
+        DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
+      catch ex
+        @error parts[1]
+        @error ex
+      end
     end
   end
 end

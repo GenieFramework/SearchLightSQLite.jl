@@ -1,7 +1,7 @@
 name = "SearchLightSQLite"
 uuid = "21a827c4-482a-11ea-3a19-4d2243a4a2c5"
 authors = ["Adrian Salceanu <e@essenciary.com>"]
-version = "0.6"
+version = "0.6.0"
 
 [deps]
 DBInterface = "a10d1c49-ce27-4219-8d33-6db1a4562965"
