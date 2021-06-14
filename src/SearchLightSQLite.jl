@@ -20,8 +20,8 @@ const DatabaseHandle = SQLite.DB
 const ResultHandle   = Union{Vector{Any}, DataFrames.DataFrame, Vector{Tuple}, Vector{Tuple{Int64}}}
 
 const TYPE_MAPPINGS = Dict{Symbol,Symbol}( # Julia => SQLite
-  :char       => :CHARACTER,
-  :string     => :VARCHAR,
+  :char       => :TEXT,
+  :string     => :TEXT,
   :text       => :TEXT,
   :integer    => :INTEGER,
   :int        => :INTEGER,
@@ -51,19 +51,19 @@ const CONNECTIONS = DatabaseHandle[]
     connect(conn_data::Dict)::DatabaseHandle
     function connect()::DatabaseHandle
 
-Connects to the database defined in conn_data["filename"] and returns a handle.
+Connects to the database defined in conn_data["database"] or conn_data["host"] and returns a handle.
 If no conn_data is provided, a temporary, in-memory database will be used.
 """
 function SearchLight.connect(conn_data::Dict = SearchLight.config.db_config_settings) :: DatabaseHandle
-  if ! haskey(conn_data, "filename")
-    conn_data["filename"] = if haskey(conn_data, "host") && conn_data["host"] != nothing
-                              conn_data["host"]
-                            elseif haskey(conn_data, "database") && conn_data["database"] != nothing
-                              conn_data["database"]
-                            end
-  end
+    dbname =  if haskey(conn_data, "host") && conn_data["host"] !== nothing
+                conn_data["host"]
+              elseif haskey(conn_data, "database") && conn_data["database"] !== nothing
+                conn_data["database"]
+              end
 
-  push!(CONNECTIONS, SQLite.DB(conn_data["filename"]))[end]
+  isempty(dirname(dbname)) || mkpath(dirname(dbname))
+
+  push!(CONNECTIONS, SQLite.DB(dbname))[end]
 end
 
 
@@ -169,7 +169,7 @@ function SearchLight.query(sql::String, conn::DatabaseHandle = SearchLight.conne
   if SearchLight.config.log_queries && ! internal
     if length(parts) == 2
       @info parts[1]
-      @time DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
+      @time DBInterface.execute(conn, parts[1])
 
       @info parts[2]
       @time DBInterface.execute(conn, parts[2]) |> DataFrames.DataFrame
@@ -180,7 +180,7 @@ function SearchLight.query(sql::String, conn::DatabaseHandle = SearchLight.conne
   else
     if length(parts) == 2
       try
-        DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
+        DBInterface.execute(conn, parts[1])
       catch ex
         @error parts[1]
         @error ex
@@ -214,8 +214,9 @@ end
 
 function SearchLight.to_store_sql(m::T; conflict_strategy = :error)::String where {T<:SearchLight.AbstractModel}
   uf = SearchLight.persistable_fields(typeof(m))
+  insert_condition = (! SearchLight.ispersisted(m) || (SearchLight.ispersisted(m) && conflict_strategy == :update))
 
-  sql = if ! SearchLight.ispersisted(m) || (SearchLight.ispersisted(m) && conflict_strategy == :update)
+  sql = if insert_condition
     pos = findfirst(x -> x == SearchLight.primary_key_name(typeof(m)), uf)
     pos > 0 && splice!(uf, pos)
 
@@ -227,10 +228,17 @@ function SearchLight.to_store_sql(m::T; conflict_strategy = :error)::String wher
     "UPDATE $(SearchLight.table(typeof(m))) SET $(SearchLight.update_query_part(m))"
   end
 
-  string( sql, raw" ",
-          SELECT_LAST_ID_QUERY_START, raw" ",
-          getfield(m, Symbol(SearchLight.primary_key_name(m))).value === nothing ? -1 : getfield(m, Symbol(SearchLight.primary_key_name(m))).value, raw" ",
-          SELECT_LAST_ID_QUERY_END)
+  id_sql = if insert_condition
+    string(
+      SELECT_LAST_ID_QUERY_START, raw" ",
+      getfield(m, Symbol(SearchLight.primary_key_name(m))).value === nothing ? -1 : getfield(m, Symbol(SearchLight.primary_key_name(m))).value, raw" ",
+      SELECT_LAST_ID_QUERY_END
+    )
+  else
+    "; SELECT $( getfield(m, Symbol(SearchLight.primary_key_name(m))).value ) AS LAST_INSERT_ID"
+  end
+
+  string( sql, raw" ", id_sql)
 end
 
 
@@ -373,9 +381,10 @@ function create_table_sql(f::Function, name::Union{String,Symbol}, options::Unio
 end
 
 
-function SearchLight.Migration.column(name::Union{String,Symbol}, column_type::Union{String,Symbol}, options::Any = ""; default::Any = nothing, limit::Union{Int,Nothing,String} = nothing, not_null::Bool = false) :: String
+function SearchLight.Migration.column(name::Union{String,Symbol}, column_type::Union{String,Symbol}, options::Any = "";
+                  default::Any = nothing, limit::Union{Int,Nothing,String} = nothing, not_null::Bool = false) :: String
   "$name $(TYPE_MAPPINGS[column_type] |> string) " *
-    (isa(limit, Int) ? "($limit)" : "") *
+    (isa(limit, Int) && (! in(TYPE_MAPPINGS[column_type], [:TEXT])) ? "($limit)" : "") *
     (default === nothing ? "" : " DEFAULT $default ") *
     (not_null ? " NOT NULL " : "") *
     " " * string(options)
