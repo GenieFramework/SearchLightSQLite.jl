@@ -85,32 +85,6 @@ end
 
 
 #
-# Utility
-#
-
-
-"""
-    columns{T<:AbstractModel}(m::Type{T})::DataFrames.DataFrame
-    columns{T<:AbstractModel}(m::T)::DataFrames.DataFrame
-
-Returns a DataFrame representing schema information for the database table columns associated with `m`.
-"""
-function SearchLight.columns(m::Type{T})::DataFrames.DataFrame where {T<:SearchLight.AbstractModel}
-  SearchLight.query(table_columns_sql(SearchLight.table(m)), internal = true)
-end
-
-
-"""
-    table_columns_sql(table_name::String)::String
-
-Returns the adapter specific query for SELECTing table columns information corresponding to `table_name`.
-"""
-function table_columns_sql(table_name::String) :: String
-  "PRAGMA table_info(`$table_name`)"
-end
-
-
-#
 # Data sanitization
 #
 
@@ -157,54 +131,28 @@ julia> query(SearchLight.to_fetch_sql(Article, SQLQuery(limit = 5)), false, Data
 ...
 ```
 """
-function SearchLight.query(sql::String, conn::DatabaseHandle = SearchLight.connection(); internal = false) :: DataFrames.DataFrame
+function SearchLight.query(sql::String, conn::DatabaseHandle = SearchLight.connection()) :: DataFrames.DataFrame
   parts::Vector{String} = if occursin(SELECT_LAST_ID_QUERY_START, sql)
                             split(sql, SELECT_LAST_ID_QUERY_START)
                           else
                             String[sql]
                           end
 
-  length(parts) == 2 && (parts[2] = string(SELECT_LAST_ID_QUERY_START, parts[2]))
+  if length(parts) == 2
+    @info parts[1]
+    @time DBInterface.execute(conn, parts[1])
 
-  if SearchLight.config.log_queries && ! internal
-    if length(parts) == 2
-      @info parts[1]
-      @time DBInterface.execute(conn, parts[1])
-
-      @info parts[2]
-      @time DBInterface.execute(conn, parts[2]) |> DataFrames.DataFrame
-    else
-      @info parts[1]
-      @time DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
-    end
+    parts[2] = string(SELECT_LAST_ID_QUERY_START, parts[2])
+    @info parts[2]
+    @time DBInterface.execute(conn, parts[2]) |> DataFrames.DataFrame
   else
-    if length(parts) == 2
-      try
-        DBInterface.execute(conn, parts[1])
-      catch ex
-        @error parts[1]
-        @error ex
-      end
-
-      try
-        DBInterface.execute(conn, parts[2]) |> DataFrames.DataFrame
-      catch ex
-        @error parts[2]
-        @error ex
-      end
-    else
-      try
-        DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
-      catch ex
-        @error parts[1]
-        @error ex
-      end
-    end
+    @info parts[1]
+    @time DBInterface.execute(conn, parts[1]) |> DataFrames.DataFrame
   end
 end
 
 
-function SearchLight.to_find_sql(m::Type{T}, q::SearchLight.SQLQuery, joins::Union{Nothing,Vector{SearchLight.SQLJoin{N}}} = nothing)::String where {T<:SearchLight.AbstractModel, N<:Union{Nothing,SearchLight.AbstractModel}}
+function SearchLight.to_find_sql(m::Type{T}, q::SearchLight.SQLQuery, joins::Union{Nothing,Vector{SearchLight.SQLJoin}} = nothing)::String where {T<:SearchLight.AbstractModel}
   sql::String = ( string("$(SearchLight.to_select_part(m, q.columns, joins)) $(SearchLight.to_from_part(m)) $(SearchLight.to_join_part(m, joins)) $(SearchLight.to_where_part(q.where)) ",
                       "$(SearchLight.to_group_part(q.group)) $(SearchLight.to_having_part(q.having)) $(SearchLight.to_order_part(m, q.order)) ",
                       "$(SearchLight.to_limit_part(q.limit)) $(SearchLight.to_offset_part(q.offset))")) |> strip
@@ -335,7 +283,7 @@ function SearchLight.to_having_part(h::Vector{SearchLight.SQLWhereEntity}) :: St
 end
 
 
-function SearchLight.to_join_part(m::Type{T}, joins::Union{Nothing,Vector{SearchLight.SQLJoin{N}}} = nothing)::String where {T<:SearchLight.AbstractModel, N<:Union{Nothing,SearchLight.AbstractModel}}
+function SearchLight.to_join_part(m::Type{T}, joins::Union{Nothing,Vector{SearchLight.SQLJoin}} = nothing)::String where {T<:SearchLight.AbstractModel}
   joins === nothing && return ""
 
   join(map(x -> string(x), joins), " ")
@@ -361,7 +309,7 @@ function SearchLight.Migration.create_migrations_table(table_name::String = Sear
     "CREATE TABLE `$table_name` (
       `version` varchar(30) NOT NULL DEFAULT '',
       PRIMARY KEY (`version`)
-    )", internal = true)
+    )")
 
   @info "Created table $table_name"
 
@@ -370,7 +318,7 @@ end
 
 
 function SearchLight.Migration.create_table(f::Function, name::Union{String,Symbol}, options::Union{String,Symbol} = "") :: Nothing
-  SearchLight.query(create_table_sql(f, string(name), options), internal = true)
+  SearchLight.query(create_table_sql(f, string(name), options))
 
   nothing
 end
@@ -398,28 +346,28 @@ end
 
 function SearchLight.Migration.add_index(table_name::Union{String,Symbol}, column_name::Union{String,Symbol}; name::Union{String,Symbol} = "", unique::Bool = false) :: Nothing
   name = isempty(name) ? SearchLight.index_name(table_name, column_name) : name
-  SearchLight.query("CREATE $(unique ? "UNIQUE" : "") INDEX $(name) ON $table_name ($column_name)", internal = true)
+  SearchLight.query("CREATE $(unique ? "UNIQUE" : "") INDEX $(name) ON $table_name ($column_name)")
 
   nothing
 end
 
 
 function SearchLight.Migration.add_column(table_name::Union{String,Symbol}, name::Union{String,Symbol}, column_type::Union{String,Symbol}; default::Union{String,Symbol,Nothing} = nothing, limit::Union{Int,Nothing} = nothing, not_null::Bool = false) :: Nothing
-  SearchLight.query("ALTER TABLE $table_name ADD $(SearchLight.Migration.column(name, column_type, default = default, limit = limit, not_null = not_null))", internal = true)
+  SearchLight.query("ALTER TABLE $table_name ADD $(SearchLight.Migration.column(name, column_type, default = default, limit = limit, not_null = not_null))")
 
   nothing
 end
 
 
 function SearchLight.Migration.drop_table(name::Union{String,Symbol}) :: Nothing
-  SearchLight.query("DROP TABLE $name", internal = true)
+  SearchLight.query("DROP TABLE $name")
 
   nothing
 end
 
 
 function SearchLight.Migration.remove_index(name::Union{String,Symbol}) :: Nothing
-  SearchLight.query("DROP INDEX $name", internal = true)
+  SearchLight.query("DROP INDEX $name")
 
   nothing
 end
