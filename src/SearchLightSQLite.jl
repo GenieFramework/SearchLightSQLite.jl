@@ -360,6 +360,11 @@ function SearchLight.Migration.add_column(table_name::Union{String,Symbol}, name
 end
 
 
+function SearchLight.Migration.remove_column(table_name::Union{String,Symbol}, name::Union{String,Symbol}, options::Union{String,Symbol} = "") :: Nothing
+  @warn("SQLite does not support DROP COLUMN")
+end
+
+
 function SearchLight.Migration.drop_table(name::Union{String,Symbol}) :: Nothing
   SearchLight.query("DROP TABLE $name")
 
@@ -369,6 +374,30 @@ end
 
 function SearchLight.Migration.remove_index(name::Union{String,Symbol}) :: Nothing
   SearchLight.query("DROP INDEX $name")
+
+  nothing
+end
+
+
+#### TRANSACTIONS ####
+
+
+function SearchLight.Transactions.begin_transaction() :: Nothing
+  SearchLight.query("BEGIN")
+
+  nothing
+end
+
+
+function SearchLight.Transactions.commit_transaction() :: Nothing
+  SearchLight.query("COMMIT")
+
+  nothing
+end
+
+
+function SearchLight.Transactions.rollback_transaction() :: Nothing
+  SearchLight.query("ROLLBACK")
 
   nothing
 end
