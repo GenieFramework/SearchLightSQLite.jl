@@ -406,11 +406,15 @@ end
 #### GENERATOR ####
 
 
-function SearchLight.Generator.FileTemplates.adapter_default_config()
+function SearchLight.Generator.FileTemplates.adapter_default_config(; database = SearchLight.config.app_env,
+                                                                      env = SearchLight.config.app_env,
+                                                                      env_val = """ENV["GENIE_ENV"]""") :: String
   """
-  $(SearchLight.config.app_env):
+  env: $env_val
+
+  $env:
     adapter:  SQLite
-    filename: db/$(SearchLight.config.app_env).sqlite3
+    database: db/$(database).sqlite3
   """
 end
 
