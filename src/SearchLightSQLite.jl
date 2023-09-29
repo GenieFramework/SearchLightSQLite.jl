@@ -59,11 +59,18 @@ function SearchLight.connect(conn_data::Dict = SearchLight.config.db_config_sett
                 conn_data["host"]
               elseif haskey(conn_data, "database") && conn_data["database"] !== nothing
                 conn_data["database"]
+              else
+                nothing
               end
 
-  isempty(dirname(dbname)) || mkpath(dirname(dbname))
+  db = if dbname !== nothing
+    isempty(dirname(dbname)) || mkpath(dirname(dbname))
+    SQLite.DB(dbname)
+  else # in-memory
+    SQLite.DB()
+  end
 
-  push!(CONNECTIONS, SQLite.DB(dbname))[end]
+  push!(CONNECTIONS, db)[end]
 end
 
 
